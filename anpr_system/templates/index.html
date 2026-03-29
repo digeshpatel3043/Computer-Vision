@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANPR — Smart Vehicle Entry System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080b0f;
+    --surface:  #0e1318;
+    --card:     #131a22;
+    --border:   #1e2a35;
+    --border2:  #243040;
+    --text:     #c8d8e8;
+    --muted:    #4a6070;
+    --accent:   #00d4ff;
+    --green:    #00e87a;
+    --red:      #ff3a5c;
+    --orange:   #ff9020;
+    --yellow:   #ffd040;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Syne', sans-serif;
+    --radius:   6px;
+    --glow:     0 0 20px rgba(0,212,255,.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; overflow-x: hidden; }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 56px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .status-bar { display: flex; gap: 16px; align-items: center; }
+  .chip { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
+          background: var(--card); border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.5s infinite; }
+  .dot.warn { background: var(--orange); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── NAV TABS ── */
+  nav { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; gap: 4px; }
+  .tab { padding: 14px 20px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+         color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  .page { display: none; padding: 20px 24px; animation: fadeIn .3s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+  /* ── GRID ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+  @media(max-width:900px){ .grid-2,.grid-3,.grid-4{grid-template-columns:1fr} }
+
+  /* ── CARD ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-family: var(--sans); font-weight: 600; font-size: 13px; letter-spacing: .5px; }
+  .card-body { padding: 16px; }
+
+  /* ── STAT BOXES ── */
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 16px; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; }
+  .stat::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: var(--accent); }
+  .stat.green::before { background: var(--green); }
+  .stat.red::before { background: var(--red); }
+  .stat.orange::before { background: var(--orange); }
+  .stat-val { font-family: var(--sans); font-size: 32px; font-weight: 800; line-height: 1; }
+  .stat-lbl { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+
+  /* ── VIDEO ── */
+  #live-img { width: 100%; border-radius: var(--radius); display: block; background: #000; min-height: 360px; object-fit: cover; }
+  .cam-controls { display: flex; gap: 8px; padding: 12px 0 0; flex-wrap: wrap; }
+
+  /* ── RESULT PANEL ── */
+  .result-panel { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .result-panel.allowed { border-color: var(--green); box-shadow: 0 0 16px rgba(0,232,122,.1); }
+  .result-panel.denied  { border-color: var(--red);   box-shadow: 0 0 16px rgba(255,58,92,.1); }
+  .result-header { padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-family: var(--sans); font-weight: 700; font-size: 14px; }
+  .result-header.allowed { background: rgba(0,232,122,.1); color: var(--green); }
+  .result-header.denied  { background: rgba(255,58,92,.1); color: var(--red); }
+  .result-body { padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .result-field { display: flex; flex-direction: column; gap: 3px; }
+  .result-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .result-value { font-size: 13px; font-weight: 600; }
+  .plate-number { font-family: var(--sans); font-size: 22px; font-weight: 800; letter-spacing: 3px; color: var(--accent); }
+
+  /* ── UPLOAD AREA ── */
+  .upload-zone {
+    border: 2px dashed var(--border2); border-radius: var(--radius);
+    padding: 40px 20px; text-align: center; cursor: pointer; transition: all .2s;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(0,212,255,.04); }
+  .upload-zone input { display: none; }
+  .upload-icon { font-size: 36px; margin-bottom: 12px; }
+  .upload-text { color: var(--muted); font-size: 13px; }
+
+  /* ── PREVIEW ── */
+  .img-preview { width: 100%; border-radius: var(--radius); display: none; }
+  .img-preview.show { display: block; }
+  .crop-preview { width: 100%; max-height: 80px; object-fit: contain; border-radius: 3px; background: #000; }
+
+  /* ── TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th { padding: 8px 12px; text-align: left; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .data-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(255,255,255,.02); }
+  .action-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+  .action-badge.ENTRY  { background: rgba(0,232,122,.15); color: var(--green); }
+  .action-badge.DENIED { background: rgba(255,58,92,.15);  color: var(--red); }
+  .action-badge.EXIT   { background: rgba(0,212,255,.15);  color: var(--accent); }
+
+  /* ── BUTTONS ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius);
+         font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .5px;
+         border: none; cursor: pointer; transition: all .2s; white-space: nowrap; }
+  .btn-primary   { background: var(--accent); color: #000; }
+  .btn-primary:hover { filter: brightness(1.15); }
+  .btn-danger    { background: var(--red); color: #fff; }
+  .btn-danger:hover { filter: brightness(1.2); }
+  .btn-success   { background: var(--green); color: #000; }
+  .btn-success:hover { filter: brightness(1.15); }
+  .btn-ghost     { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sm        { padding: 5px 10px; font-size: 11px; }
+  .btn:disabled  { opacity: .4; cursor: not-allowed; }
+
+  /* ── FORM ── */
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 11px; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+  input, select, textarea {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: var(--mono); font-size: 13px; padding: 8px 12px;
+    transition: border .2s; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  select option { background: var(--surface); }
+
+  /* ── SLOTS GRID ── */
+  .slot-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .slot-box { border: 1px solid var(--border); border-radius: 4px; padding: 8px; text-align: center; font-size: 11px; }
+  .slot-box.free     { border-color: var(--border); color: var(--muted); }
+  .slot-box.occupied { border-color: var(--green); background: rgba(0,232,122,.07); color: var(--green); }
+  .slot-box .slot-id { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .slot-box .slot-plate { font-size: 10px; letter-spacing: 1px; }
+
+  /* ── ALERT ITEM ── */
+  .alert-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .alert-item:last-child { border-bottom: none; }
+  .alert-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; margin-top: 4px; }
+  .alert-dot.resolved { background: var(--muted); }
+  .alert-msg { flex: 1; font-size: 12px; }
+  .alert-time { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+  /* ── TOAST ── */
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+           background: var(--card); border: 1px solid var(--border); padding: 12px 18px;
+           border-radius: var(--radius); font-size: 13px; transform: translateY(80px);
+           opacity: 0; transition: all .3s; max-width: 320px; }
+  #toast.show { transform: none; opacity: 1; }
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error   { border-color: var(--red);   color: var(--red); }
+
+  /* ── ALLOW ENTRY BANNER ── */
+  #allow-entry-banner {
+    display: none; margin-top: 12px;
+    border: 1px solid var(--orange); border-radius: var(--radius);
+    background: rgba(255,144,32,.08); padding: 14px 16px;
+    animation: fadeIn .3s ease;
+  }
+  #allow-entry-banner .banner-title { color: var(--orange); font-family: var(--sans); font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+  .conf-bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; overflow: hidden; }
+  .conf-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .4s; }
+  .scrollable { max-height: 420px; overflow-y: auto; }
+  .scrollable::-webkit-scrollbar { width: 4px; }
+  .scrollable::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── ANALYTICS ── */
+  .an-kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 16px; }
+  @media(max-width:900px){ .an-kpi-grid{grid-template-columns:repeat(2,1fr)} }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; position: relative; overflow: hidden; }
+  .kpi::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background: var(--border2); }
+  .kpi.accent::after  { background: var(--accent); }
+  .kpi.green::after   { background: var(--green); }
+  .kpi.red::after     { background: var(--red); }
+  .kpi.orange::after  { background: var(--orange); }
+  .kpi .kpi-val { font-family: var(--sans); font-size: 28px; font-weight: 800; line-height: 1.1; }
+  .kpi .kpi-lbl { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+  .kpi .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .chart-head { padding: 11px 16px; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .chart-head .card-title { font-family: var(--sans); font-weight: 600; font-size: 12px; letter-spacing:.5px; }
+  .chart-inner { padding: 16px; }
+
+  /* Bar chart */
+  .bar-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
+  .bar-col { display:flex; flex-direction:column; align-items:center; flex:1; gap:3px; }
+  .bar { width:100%; border-radius: 2px 2px 0 0; min-height:2px; transition: height .4s ease; cursor:default; position:relative; }
+  .bar:hover::after { content: attr(data-val); position:absolute; top:-22px; left:50%; transform:translateX(-50%); background:var(--surface); border:1px solid var(--border); padding:2px 6px; border-radius:3px; font-size:10px; white-space:nowrap; }
+  .bar-lbl { font-size:9px; color:var(--muted); text-align:center; }
+
+  /* Horizontal bar */
+  .hbar-list { display:flex; flex-direction:column; gap:8px; }
+  .hbar-row { display:flex; align-items:center; gap:10px; font-size:12px; }
+  .hbar-label { width:90px; flex-shrink:0; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hbar-track { flex:1; background:var(--border); border-radius:2px; height:8px; overflow:hidden; }
+  .hbar-fill  { height:100%; border-radius:2px; transition: width .5s ease; }
+  .hbar-val   { width:32px; text-align:right; color:var(--muted); font-size:11px; }
+
+  /* Donut */
+  .donut-wrap { display:flex; align-items:center; gap:20px; }
+  .donut-svg  { flex-shrink:0; }
+  .donut-legend { display:flex; flex-direction:column; gap:7px; }
+  .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; }
+  .legend-dot  { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+  /* Table compact */
+  .an-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .an-table th { padding:6px 10px; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); text-align:left; }
+  .an-table td { padding:7px 10px; border-bottom:1px solid var(--border); }
+  .an-table tr:last-child td { border:none; }
+  .badge-cat { display:inline-block; padding:1px 7px; border-radius:3px; font-size:10px; font-weight:700; }
+  .badge-cat.Resident      { background:rgba(0,212,255,.15); color:var(--accent); }
+  .badge-cat.Blacklisted   { background:rgba(255,58,92,.15);  color:var(--red); }
+  .badge-cat.Visitor       { background:rgba(255,208,64,.15); color:var(--yellow); }
+  .badge-cat.Unregistered  { background:rgba(100,100,100,.2); color:var(--muted); }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .w-full { width: 100%; }
+  .text-muted { color: var(--muted); font-size: 12px; }
+
+  /* ── MULTI-CAM ── */
+  .cam-tile { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .cam-tile-header { padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .cam-tile-body img { width: 100%; display: block; min-height: 200px; background: #000; object-fit: cover; }
+  .cam-tile-footer { padding: 6px 10px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); min-height: 30px; }
+  .cam-tile.running { border-color: var(--green); }
+  .cam-tile.denied-last { border-color: var(--red); }
+
+  /* ── SPEED ── */
+  .speed-badge-ok { display:inline-block; padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; background:rgba(0,232,122,.15); color:var(--green); }
+  .speed-badge-over { display:inline-block; padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; background:rgba(255,58,92,.15); color:var(--red); }
+
+  /* ── NIGHT MODE toggle ── */
+  .nm-active { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(0,212,255,.08) !important; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">ANPR<span> SYSTEM</span></div>
+  <div class="status-bar">
+    <div class="chip"><div class="dot" id="yolo-dot"></div><span id="yolo-label">YOLO</span></div>
+    <div class="chip"><div class="dot" id="ocr-dot"></div><span id="ocr-label">OCR</span></div>
+    <div class="chip"><div class="dot" id="cam-dot"></div><span id="cam-label">CAMERA</span></div>
+    <div class="chip" id="clock-chip">00:00:00</div>
+  </div>
+</header>
+
+<!-- NAV TABS -->
+<nav>
+  <div class="tab active" onclick="showPage('live')">📹 Live Camera</div>
+  <div class="tab" onclick="showPage('manual')">🖼 Manual Detection</div>
+  <div class="tab" onclick="showPage('multicam')">📷 Multi-Camera</div>
+  <div class="tab" onclick="showPage('dashboard')">📊 Dashboard</div>
+  <div class="tab" onclick="showPage('analytics')">📈 Analytics</div>
+  <div class="tab" onclick="showPage('vehicles')">🚗 Vehicles</div>
+  <div class="tab" onclick="showPage('slots')">🅿 Parking</div>
+  <div class="tab" onclick="showPage('speed')">⚡ Speed</div>
+  <div class="tab" onclick="showPage('nightmode')">🌙 Night Mode</div>
+</nav>
+
+<!-- ══════════════════ PAGE: LIVE CAMERA ══════════════════ -->
+<div class="page active" id="page-live">
+  <div class="grid-2">
+    <!-- Left: Camera feed -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">LIVE FEED</span>
+          <div class="flex gap-8">
+            <button class="btn btn-success btn-sm" onclick="startCamera()">▶ Start</button>
+            <button class="btn btn-ghost btn-sm" onclick="stopCamera()">■ Stop</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:12px;">
+          <img id="live-img" src="/video_feed" alt="ANPR Live Feed">
+          <div class="cam-controls">
+            <select id="cam-index" style="width:auto;flex:0 0 auto;">
+              <option value="0">Camera 0 (default)</option>
+              <option value="1">Camera 1</option>
+              <option value="2">Camera 2</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Live detection result -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">DETECTION RESULT</span>
+          <span class="text-muted" id="live-ts">—</span>
+        </div>
+        <div class="card-body" id="live-result-panel">
+          <div class="text-muted" style="text-align:center;padding:40px 0;">Waiting for detection...</div>
+        </div>
+      </div>
+
+      <div class="card mt-12">
+        <div class="card-header"><span class="card-title">RECENT DETECTIONS</span></div>
+        <div class="scrollable">
+          <table class="data-table" id="live-log-table">
+            <thead><tr><th>Time</th><th>Plate</th><th>Action</th><th>Owner</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: MANUAL DETECTION ══════════════════ -->
+<div class="page" id="page-manual">
+  <div class="grid-2">
+    <!-- Left: Upload + preview -->
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">UPLOAD IMAGE</span></div>
+        <div class="card-body">
+          <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+               ondragover="event.preventDefault();this.classList.add('drag')"
+               ondragleave="this.classList.remove('drag')"
+               ondrop="handleDrop(event)">
+            <input type="file" id="file-input" accept="image/*" onchange="loadFile(this)">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">Click to upload or drag & drop<br><small>JPG, PNG, WEBP — max 10MB</small></div>
+          </div>
+          <div class="mt-12">
+            <img id="img-preview" class="img-preview" alt="Preview">
+            <img id="annotated-preview" class="img-preview mt-12" alt="Annotated">
+          </div>
+          <div class="mt-12 flex gap-8">
+            <button class="btn btn-primary w-full" id="detect-btn" onclick="runDetection()" disabled>
+              🔍 Detect Plate
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Detection result -->
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">RESULT</span></div>
+        <div class="card-body" id="manual-result-panel">
+          <div class="text-muted" style="text-align:center;padding:40px 0;">Upload an image to begin</div>
+        </div>
+
+        <!-- Allow Entry button (shown only when DENIED) -->
+        <div id="allow-entry-banner">
+          <div class="banner-title">⚠ Vehicle Not Registered</div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:12px;">
+            This plate is not in the database. You can manually allow entry and register it.
+          </p>
+          <div class="grid-2" style="gap:8px;margin-bottom:12px;">
+            <div class="form-group">
+              <label>Owner Name</label>
+              <input id="ov-owner" type="text" placeholder="e.g. John Doe">
+            </div>
+            <div class="form-group">
+              <label>Vehicle Type</label>
+              <select id="ov-vtype">
+                <option>Car</option><option>SUV</option><option>Van</option>
+                <option>Hatchback</option><option>Sedan</option><option>Truck</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Flat / Unit</label>
+              <input id="ov-flat" type="text" placeholder="e.g. A-101">
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="ov-category">
+                <option>Resident</option><option>Visitor</option><option>Staff</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-success w-full" onclick="allowEntry()">✅ Allow Entry & Register Vehicle</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: DASHBOARD ══════════════════ -->
+<div class="page" id="page-dashboard">
+  <div class="grid-4" id="stats-grid">
+    <div class="stat"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total Events</div></div>
+    <div class="stat green"><div class="stat-val" id="s-entries">—</div><div class="stat-lbl">Entries</div></div>
+    <div class="stat red"><div class="stat-val" id="s-denied">—</div><div class="stat-lbl">Denied</div></div>
+    <div class="stat orange"><div class="stat-val" id="s-alerts">—</div><div class="stat-lbl">Active Alerts</div></div>
+  </div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">DETECTION LOG</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadLogs()">↻ Refresh</button>
+      </div>
+      <div class="scrollable">
+        <table class="data-table" id="log-table">
+          <thead><tr><th>Time</th><th>Plate</th><th>Action</th><th>Gate</th><th>Slot</th><th>Conf%</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">ALERTS</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadAlerts()">↻ Refresh</button>
+      </div>
+      <div class="scrollable" id="alerts-list">
+        <div class="text-muted" style="padding:20px;text-align:center;">No alerts</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: VEHICLES ══════════════════ -->
+<div class="page" id="page-vehicles">
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">REGISTER VEHICLE</span></div>
+      <div class="card-body">
+        <div class="grid-2" style="gap:10px;">
+          <div class="form-group">
+            <label>Plate Number *</label>
+            <input id="v-plate" type="text" placeholder="DL8CAU6883" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <div class="form-group">
+            <label>Owner Name</label>
+            <input id="v-owner" type="text" placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label>Vehicle Type</label>
+            <select id="v-vtype">
+              <option>Car</option><option>SUV</option><option>Van</option>
+              <option>Hatchback</option><option>Sedan</option><option>Truck</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Flat / Unit</label>
+            <input id="v-flat" type="text" placeholder="A-101">
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="v-category">
+              <option>Resident</option><option>Visitor</option><option>Staff</option><option>Blacklisted</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary mt-12 w-full" onclick="registerVehicle()">＋ Register Vehicle</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">REGISTERED VEHICLES</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadVehicles()">↻ Refresh</button>
+      </div>
+      <div class="scrollable">
+        <table class="data-table" id="vehicles-table">
+          <thead><tr><th>Plate</th><th>Owner</th><th>Type</th><th>Flat</th><th>Category</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: PARKING ══════════════════ -->
+<div class="page" id="page-slots">
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">PARKING SLOTS</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadSlots()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <div id="slots-grid" class="slot-grid"></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">EXIT VEHICLE</span></div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Plate Number</label>
+            <input id="exit-plate" type="text" placeholder="DL8CAU6883" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <button class="btn btn-danger mt-12 w-full" onclick="exitVehicle()">🚗 Process Exit</button>
+        </div>
+      </div>
+      <div class="card mt-12">
+        <div class="card-header"><span class="card-title">SLOT STATS</span></div>
+        <div class="card-body">
+          <div class="grid-2" style="gap:10px;" id="slot-stats">
+            <div class="stat green"><div class="stat-val" id="s-free">—</div><div class="stat-lbl">Free Slots</div></div>
+            <div class="stat"><div class="stat-val" id="s-occ">—</div><div class="stat-lbl">Occupied</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: ANALYTICS ══════════════════ -->
+<div class="page" id="page-analytics">
+
+  <!-- KPI Row -->
+  <div class="an-kpi-grid" id="an-kpis">
+    <div class="kpi accent"><div class="kpi-val" id="an-total">—</div><div class="kpi-lbl">Total Events</div></div>
+    <div class="kpi green"> <div class="kpi-val" id="an-entries">—</div><div class="kpi-lbl">All-time Entries</div></div>
+    <div class="kpi red">   <div class="kpi-val" id="an-denied">—</div><div class="kpi-lbl">Denied</div></div>
+    <div class="kpi orange"><div class="kpi-val" id="an-rate">—</div><div class="kpi-lbl">Approval Rate</div></div>
+    <div class="kpi accent"><div class="kpi-val" id="an-today">—</div><div class="kpi-lbl">Events Today</div></div>
+    <div class="kpi green"> <div class="kpi-val" id="an-unique">—</div><div class="kpi-lbl">Unique Plates Today</div></div>
+    <div class="kpi">       <div class="kpi-val" id="an-reg">—</div><div class="kpi-lbl">Registered Vehicles</div></div>
+    <div class="kpi red">   <div class="kpi-val" id="an-alerts">—</div><div class="kpi-lbl">Open Alerts</div></div>
+  </div>
+
+  <!-- Row 1: Hourly Traffic + Action Breakdown -->
+  <div class="grid-2">
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">HOURLY TRAFFIC PATTERN</span>
+        <span class="text-muted" style="font-size:11px">Detections by hour of day</span>
+      </div>
+      <div class="chart-inner">
+        <div id="hourly-chart" class="bar-chart"></div>
+        <div id="hourly-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">ACTION BREAKDOWN</span>
+        <span class="text-muted" style="font-size:11px">ENTRY / DENIED / EXIT</span>
+      </div>
+      <div class="chart-inner">
+        <div class="donut-wrap" id="action-donut">
+          <svg class="donut-svg" id="donut-svg" width="130" height="130" viewBox="0 0 130 130"></svg>
+          <div class="donut-legend" id="donut-legend"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Vehicle Type + OCR Confidence -->
+  <div class="grid-2">
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">VEHICLE TYPES DETECTED</span>
+      </div>
+      <div class="chart-inner">
+        <div class="hbar-list" id="vtype-bars"></div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">OCR CONFIDENCE DISTRIBUTION</span>
+        <span class="text-muted" style="font-size:11px">% of reads per bucket</span>
+      </div>
+      <div class="chart-inner">
+        <div id="ocr-conf-chart" class="bar-chart" style="height:100px;"></div>
+        <div id="ocr-conf-labels" style="display:flex;gap:3px;margin-top:4px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Category + Gate Activity -->
+  <div class="grid-2">
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">REGISTERED — BY CATEGORY</span>
+      </div>
+      <div class="chart-inner">
+        <div class="hbar-list" id="category-bars"></div>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">GATE ACTIVITY</span>
+      </div>
+      <div class="chart-inner">
+        <div class="hbar-list" id="gate-bars"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 4: Top Plates + Frequent Denials -->
+  <div class="grid-2">
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">TOP DETECTED PLATES</span>
+        <span class="text-muted" style="font-size:11px">Most frequent</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="an-table" id="top-plates-table">
+          <thead><tr><th>#</th><th>Plate</th><th>Visits</th><th>Owner</th><th>Category</th><th>Last Seen</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="chart-wrap">
+      <div class="chart-head">
+        <span class="card-title">FREQUENT DENIALS</span>
+        <span class="text-muted" style="font-size:11px" style="color:var(--red)">Security watch</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="an-table" id="denials-table">
+          <thead><tr><th>#</th><th>Plate</th><th>Denials</th><th>Last Attempt</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:right;font-size:11px;color:var(--muted);margin-top:8px" id="an-generated">—</div>
+</div>
+
+<!-- ══════════════════ PAGE: MULTI-CAMERA ══════════════════ -->
+<div class="page" id="page-multicam">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <span style="font-family:var(--sans);font-weight:700;font-size:15px;">Multi-Camera Manager</span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-success btn-sm" onclick="startAllCams()">▶ Start All</button>
+      <button class="btn btn-danger btn-sm" onclick="stopAllCams()">■ Stop All</button>
+      <button class="btn btn-ghost btn-sm" onclick="refreshCamStatus()">↻ Status</button>
+    </div>
+  </div>
+
+  <!-- 4-camera grid -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" id="multicam-grid">
+    <!-- Cameras 0-3 rendered by JS -->
+  </div>
+
+  <!-- Multi-cam results log -->
+  <div class="card mt-16">
+    <div class="card-header">
+      <span class="card-title">MULTI-CAM DETECTION LOG</span>
+      <button class="btn btn-ghost btn-sm" onclick="loadLogs()">↻ Refresh</button>
+    </div>
+    <div class="scrollable">
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>Camera</th><th>Plate</th><th>Action</th><th>Owner</th><th>Gate</th></tr></thead>
+        <tbody id="multicam-log-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: SPEED ESTIMATOR ══════════════════ -->
+<div class="page" id="page-speed">
+  <div class="grid-2">
+    <!-- Left: Status + Config -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">SPEED ESTIMATOR STATUS</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadSpeed()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <div class="grid-2" style="gap:10px;margin-bottom:14px">
+            <div class="stat green"><div class="stat-val" id="sp-readings">—</div><div class="stat-lbl">Total Readings</div></div>
+            <div class="stat red"><div class="stat-val" id="sp-overspeed">—</div><div class="stat-lbl">Overspeed Events</div></div>
+            <div class="stat"><div class="stat-val" id="sp-zone-a">—</div><div class="stat-lbl">In Zone A</div></div>
+            <div class="stat orange"><div class="stat-val" id="sp-limit">—</div><div class="stat-lbl">Speed Limit (km/h)</div></div>
+          </div>
+          <div style="padding:12px;background:var(--surface);border-radius:var(--radius);font-size:12px;color:var(--muted);margin-bottom:14px;">
+            <div style="margin-bottom:4px;color:var(--text);font-weight:600;">How it works</div>
+            Zone A (top 10–40%) → Zone B (bottom 60–90%). Time between zones + known distance = speed.
+            The live feed draws zone lines — make sure your camera is positioned correctly.
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-12">
+        <div class="card-header"><span class="card-title">CONFIGURE</span></div>
+        <div class="card-body">
+          <div class="grid-2" style="gap:10px">
+            <div class="form-group">
+              <label>Zone Distance (metres)</label>
+              <input id="sp-dist-input" type="number" step="0.5" min="1" max="50" placeholder="5.0">
+            </div>
+            <div class="form-group">
+              <label>Speed Limit (km/h)</label>
+              <input id="sp-lim-input" type="number" step="1" min="5" max="120" placeholder="20">
+            </div>
+          </div>
+          <button class="btn btn-primary mt-12 w-full" onclick="saveSpeedConfig()">💾 Save Config</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: History -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">SPEED HISTORY</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadSpeed()">↻ Refresh</button>
+        </div>
+        <div class="scrollable">
+          <table class="data-table" id="speed-table">
+            <thead><tr><th>Time</th><th>Plate</th><th>Speed km/h</th><th>Status</th><th>Elapsed s</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ PAGE: NIGHT MODE ══════════════════ -->
+<div class="page" id="page-nightmode">
+  <div class="grid-2">
+    <!-- Left: Controls -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">NIGHT MODE CONTROL</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadNightMode()">↻ Refresh</button>
+        </div>
+        <div class="card-body">
+          <!-- Live status -->
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:14px;background:var(--surface);border-radius:var(--radius);">
+            <div id="nm-indicator" style="width:16px;height:16px;border-radius:50%;background:var(--muted);flex-shrink:0;"></div>
+            <div>
+              <div style="font-size:13px;font-weight:700;" id="nm-status-text">Loading...</div>
+              <div style="font-size:11px;color:var(--muted);">Brightness: <span id="nm-brightness">—</span> / 255</div>
+            </div>
+          </div>
+
+          <!-- Mode buttons -->
+          <div style="margin-bottom:14px;">
+            <div style="font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Enhancement Mode</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost" id="nm-auto-btn" onclick="setNightMode('AUTO')" style="flex:1;">🔄 AUTO</button>
+              <button class="btn btn-ghost" id="nm-on-btn" onclick="setNightMode('ON')" style="flex:1;">🌙 FORCE ON</button>
+              <button class="btn btn-ghost" id="nm-off-btn" onclick="setNightMode('OFF')" style="flex:1;">☀ FORCE OFF</button>
+            </div>
+          </div>
+
+          <!-- Info box -->
+          <div style="padding:12px;background:var(--surface);border-radius:var(--radius);font-size:12px;color:var(--muted);">
+            <div style="color:var(--text);font-weight:600;margin-bottom:6px;">Pipeline (when active)</div>
+            <div>① Gamma brightening (γ=1.8)</div>
+            <div>② CLAHE on LAB L-channel (clip=3.5)</div>
+            <div>③ Bilateral denoising (d=5)</div>
+            <div>④ Unsharp mask edge sharpening</div>
+            <div style="margin-top:8px;color:var(--accent)">Auto-detection threshold: &lt;85 brightness → night</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Switch Log -->
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">BRIGHTNESS HISTORY</span></div>
+        <div class="card-body" id="nm-switchlog">
+          <div class="text-muted" style="text-align:center;padding:30px;">Loading...</div>
+        </div>
+      </div>
+
+      <div class="card mt-12">
+        <div class="card-header"><span class="card-title">NIGHT/DAY DETECTION SPLIT</span></div>
+        <div class="card-body" id="nm-split">
+          <div class="text-muted" style="text-align:center;padding:20px;">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let currentImageB64   = null;
+let currentDetection  = null;
+let livePolling       = null;
+let logPolling        = null;
+
+// ── Routing ────────────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const tabs = { live:0, manual:1, multicam:2, dashboard:3, analytics:4, vehicles:5, slots:6, speed:7, nightmode:8 };
+  document.querySelectorAll('.tab')[tabs[name]].classList.add('active');
+  if (name === 'dashboard')  { loadLogs(); loadAlerts(); loadStats(); }
+  if (name === 'analytics')  loadAnalytics();
+  if (name === 'vehicles')   loadVehicles();
+  if (name === 'slots')      loadSlots();
+  if (name === 'speed')      loadSpeed();
+  if (name === 'nightmode')  loadNightMode();
+  if (name === 'multicam')   { initMultiCamGrid(); refreshCamStatus(); }
+}
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock-chip').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+// ── Status ─────────────────────────────────────────────────────────────────────
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/stats').then(r => r.json());
+    setDot('yolo-dot', 'yolo-label', r.yolo_loaded, 'YOLO');
+    setDot('ocr-dot',  'ocr-label',  r.ocr_loaded,  'OCR');
+    setDot('cam-dot',  'cam-label',  r.camera_mode === 'live', 'CAM', r.camera_mode);
+  } catch {}
+}
+function setDot(dotId, lblId, ok, prefix, extra) {
+  const d = document.getElementById(dotId);
+  const l = document.getElementById(lblId);
+  d.className = 'dot' + (ok ? ' live' : '');
+  l.textContent = extra || (ok ? prefix + ' ✓' : prefix);
+}
+setInterval(refreshStatus, 5000);
+refreshStatus();
+
+// ── Camera ─────────────────────────────────────────────────────────────────────
+async function startCamera() {
+  const idx = parseInt(document.getElementById('cam-index').value);
+  const r   = await fetch('/api/camera/start', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ index: idx })
+  }).then(r => r.json());
+  toast(r.message || (r.ok ? 'Camera started' : 'Failed'), r.ok ? 'success' : 'error');
+  document.getElementById('live-img').src = '/video_feed?' + Date.now();
+  startLivePolling();
+}
+async function stopCamera() {
+  await fetch('/api/camera/stop', { method: 'POST' });
+  stopLivePolling();
+  toast('Camera stopped');
+}
+
+function startLivePolling() {
+  if (livePolling) return;
+  livePolling = setInterval(pollLiveResult, 1500);
+}
+function stopLivePolling() {
+  clearInterval(livePolling);
+  livePolling = null;
+}
+async function pollLiveResult() {
+  try {
+    const r = await fetch('/api/camera/last').then(r => r.json());
+    if (r.fresh && r.plate) {
+      document.getElementById('live-ts').textContent = r.timestamp || '';
+      renderLiveResult(r);
+      appendLiveLog(r);
+    }
+  } catch {}
+}
+
+function renderLiveResult(r) {
+  const auth = r.authorized;
+  const cls  = auth ? 'allowed' : 'denied';
+  document.getElementById('live-result-panel').innerHTML = `
+    <div class="result-panel ${cls}">
+      <div class="result-header ${cls}">${auth ? '✅ ENTRY ALLOWED' : '❌ ENTRY DENIED'}</div>
+      <div class="result-body">
+        <div class="result-field" style="grid-column:1/-1">
+          <div class="result-label">Plate Number</div>
+          <div class="plate-number">${r.plate || '—'}</div>
+        </div>
+        <div class="result-field"><div class="result-label">Owner</div><div class="result-value">${r.owner||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Vehicle Type</div><div class="result-value">${r.vtype||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Flat</div><div class="result-value">${r.flat||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Category</div><div class="result-value">${r.category||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Slot</div><div class="result-value" style="color:var(--accent)">${r.slot||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Confidence</div><div class="result-value">${r.conf||0}%</div></div>
+      </div>
+    </div>
+    ${!auth ? `<button class="btn btn-success mt-12 w-full" onclick='allowEntryFromLive(${JSON.stringify(r)})'>✅ Allow Entry</button>` : ''}
+    ${r.crop_b64 ? `<img class="crop-preview mt-12" src="data:image/jpeg;base64,${r.crop_b64}">` : ''}
+  `;
+}
+
+const liveLogBuffer = [];
+function appendLiveLog(r) {
+  liveLogBuffer.unshift(r);
+  if (liveLogBuffer.length > 10) liveLogBuffer.pop();
+  const tbody = document.querySelector('#live-log-table tbody');
+  tbody.innerHTML = liveLogBuffer.map(row => `
+    <tr>
+      <td>${row.timestamp||'—'}</td>
+      <td style="font-weight:600;color:var(--accent)">${row.plate||'—'}</td>
+      <td><span class="action-badge ${row.action}">${row.action}</span></td>
+      <td>${row.owner||'—'}</td>
+    </tr>`).join('');
+}
+
+async function allowEntryFromLive(r) {
+  const res = await fetch('/api/allow_entry', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ plate: r.plate, owner: r.owner, vtype: r.vtype })
+  }).then(r => r.json());
+  toast(res.message || 'Entry allowed', 'success');
+}
+
+// ── Manual Detection ───────────────────────────────────────────────────────────
+function loadFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    currentImageB64 = e.target.result;
+    const preview = document.getElementById('img-preview');
+    preview.src = currentImageB64;
+    preview.classList.add('show');
+    document.getElementById('detect-btn').disabled = false;
+    document.getElementById('allow-entry-banner').style.display = 'none';
+    document.getElementById('manual-result-panel').innerHTML =
+      '<div class="text-muted" style="text-align:center;padding:20px;">Image loaded. Click Detect.</div>';
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('file-input').files = dt.files;
+    loadFile(document.getElementById('file-input'));
+  }
+}
+
+async function runDetection() {
+  if (!currentImageB64) return;
+  const btn = document.getElementById('detect-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Detecting...';
+  document.getElementById('manual-result-panel').innerHTML =
+    '<div class="text-muted" style="text-align:center;padding:40px 0;">Running 10-pass detection...</div>';
+
+  try {
+    const resp = await fetch('/api/manual_capture', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ image: currentImageB64 })
+    }).then(r => r.json());
+
+    if (!resp.success) {
+      document.getElementById('manual-result-panel').innerHTML =
+        `<div style="color:var(--red);text-align:center;padding:30px">${resp.message || resp.error || 'Detection failed'}</div>`;
+    } else {
+      currentDetection = resp.best_result;
+      renderManualResult(resp);
+      if (resp.annotated_frame) {
+        const ap = document.getElementById('annotated-preview');
+        ap.src = 'data:image/jpeg;base64,' + resp.annotated_frame;
+        ap.classList.add('show');
+      }
+    }
+  } catch (e) {
+    document.getElementById('manual-result-panel').innerHTML =
+      `<div style="color:var(--red);text-align:center;padding:30px">Error: ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🔍 Detect Plate';
+}
+
+function renderManualResult(resp) {
+  const r    = resp.best_result;
+  const auth = r.authorized;
+  const cls  = auth ? 'allowed' : 'denied';
+
+  document.getElementById('manual-result-panel').innerHTML = `
+    <div class="result-panel ${cls}">
+      <div class="result-header ${cls}">${auth ? '✅ ENTRY ALLOWED' : '❌ ENTRY DENIED'}</div>
+      <div class="result-body">
+        <div class="result-field" style="grid-column:1/-1">
+          <div class="result-label">Plate Number</div>
+          <div class="plate-number">${r.plate || '—'}</div>
+        </div>
+        <div class="result-field"><div class="result-label">Owner</div><div class="result-value">${r.owner||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Vehicle</div><div class="result-value">${r.vtype||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Flat</div><div class="result-value">${r.flat||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Category</div><div class="result-value">${r.category||'—'}</div></div>
+        <div class="result-field"><div class="result-label">Slot Assigned</div><div class="result-value" style="color:var(--accent)">${r.slot||'—'}</div></div>
+        <div class="result-field"><div class="result-label">OCR Confidence</div><div class="result-value">${r.confidence||0}%</div></div>
+        <div class="result-field"><div class="result-label">Match Distance</div><div class="result-value">${r.match_distance??'—'}</div></div>
+      </div>
+      <div style="padding:0 12px 12px">
+        <div class="conf-bar"><div class="conf-fill" style="width:${r.overall_confidence||0}%;background:${auth?'var(--green)':'var(--red)'}"></div></div>
+        <div class="text-muted" style="margin-top:4px">Overall confidence: ${r.overall_confidence||0}%</div>
+      </div>
+    </div>
+    ${r.crop_b64 ? `<div style="margin-top:10px"><div class="result-label" style="margin-bottom:6px">PLATE CROP</div><img class="crop-preview" src="data:image/jpeg;base64,${r.crop_b64}"></div>` : ''}
+    ${r.thresh_b64 ? `<div style="margin-top:8px"><div class="result-label" style="margin-bottom:6px">PROCESSED</div><img class="crop-preview" src="data:image/jpeg;base64,${r.thresh_b64}"></div>` : ''}
+  `;
+
+  // Show Allow Entry banner if denied
+  const banner = document.getElementById('allow-entry-banner');
+  if (!auth) {
+    banner.style.display = 'block';
+    document.getElementById('ov-owner').value    = r.owner !== 'Unknown' ? r.owner : '';
+    document.getElementById('ov-flat').value     = r.flat  !== '—'       ? r.flat  : '';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+async function allowEntry() {
+  if (!currentDetection) return;
+  const plate = currentDetection.plate;
+  const body  = {
+    plate:    plate,
+    owner:    document.getElementById('ov-owner').value    || 'Unknown',
+    vtype:    document.getElementById('ov-vtype').value    || 'Car',
+    flat:     document.getElementById('ov-flat').value     || '—',
+    category: document.getElementById('ov-category').value || 'Resident',
+    crop_b64: currentDetection.crop_b64 || '',
+  };
+  const r = await fetch('/api/allow_entry', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  }).then(r => r.json());
+
+  if (r.ok) {
+    toast(`✅ ${plate} registered. Slot ${r.slot} assigned.`, 'success');
+    document.getElementById('allow-entry-banner').style.display = 'none';
+    // Refresh result to show ALLOWED
+    const panel = document.getElementById('manual-result-panel');
+    const old   = panel.querySelector('.result-panel');
+    if (old) {
+      old.className = 'result-panel allowed';
+      old.querySelector('.result-header').className = 'result-header allowed';
+      old.querySelector('.result-header').textContent = '✅ ENTRY ALLOWED';
+    }
+  } else {
+    toast(r.error || 'Failed', 'error');
+  }
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats').then(r => r.json());
+    document.getElementById('s-total').textContent   = r.total_events  ?? '—';
+    document.getElementById('s-entries').textContent = r.entries       ?? '—';
+    document.getElementById('s-denied').textContent  = r.denied        ?? '—';
+    document.getElementById('s-alerts').textContent  = r.active_alerts ?? '—';
+    document.getElementById('s-free').textContent    = r.slots_free    ?? '—';
+    document.getElementById('s-occ').textContent     = r.slots_occupied?? '—';
+  } catch {}
+}
+
+async function loadLogs() {
+  try {
+    const rows  = await fetch('/api/logs?limit=50').then(r => r.json());
+    const tbody = document.querySelector('#log-table tbody');
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.timestamp||'—'}</td>
+        <td style="font-weight:600;color:var(--accent)">${r.plate||'—'}</td>
+        <td><span class="action-badge ${r.action}">${r.action}</span></td>
+        <td>${r.gate||'—'}</td>
+        <td>${r.slot||'—'}</td>
+        <td>${r.ocr_confidence?.toFixed?.(0)||'—'}%</td>
+      </tr>`).join('');
+  } catch {}
+}
+
+async function loadAlerts() {
+  try {
+    const rows = await fetch('/api/alerts').then(r => r.json());
+    const list  = document.getElementById('alerts-list');
+    if (!rows.length) {
+      list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;">No alerts</div>';
+      return;
+    }
+    list.innerHTML = rows.map(a => `
+      <div class="alert-item">
+        <div class="alert-dot ${a.resolved?'resolved':''}"></div>
+        <div class="alert-msg">
+          <strong>${a.type}</strong> — ${a.plate}
+          <div class="alert-time">${a.message}</div>
+          <div class="alert-time">${a.timestamp}</div>
+        </div>
+        ${!a.resolved ? `<button class="btn btn-ghost btn-sm" onclick="resolveAlert(${a.id})">✓</button>` : ''}
+      </div>`).join('');
+  } catch {}
+}
+
+async function resolveAlert(id) {
+  await fetch(`/api/alerts/${id}/resolve`, { method: 'POST' });
+  loadAlerts();
+  toast('Alert resolved');
+}
+
+// ── Vehicles ───────────────────────────────────────────────────────────────────
+async function registerVehicle() {
+  const plate = document.getElementById('v-plate').value.trim();
+  if (!plate) { toast('Plate number required', 'error'); return; }
+  const r = await fetch('/api/register_vehicle', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      plate, owner: document.getElementById('v-owner').value,
+      vtype: document.getElementById('v-vtype').value,
+      flat:  document.getElementById('v-flat').value,
+      category: document.getElementById('v-category').value,
+    })
+  }).then(r => r.json());
+  toast(r.message || 'Done', r.ok ? 'success' : 'error');
+  if (r.ok) loadVehicles();
+}
+
+async function loadVehicles() {
+  try {
+    const rows  = await fetch('/api/vehicles').then(r => r.json());
+    const tbody = document.querySelector('#vehicles-table tbody');
+    tbody.innerHTML = rows.map(v => `
+      <tr>
+        <td style="font-weight:600;color:var(--accent)">${v.plate}</td>
+        <td>${v.owner||'—'}</td>
+        <td>${v.vtype||'—'}</td>
+        <td>${v.flat||'—'}</td>
+        <td><span style="color:${v.category==='Blacklisted'?'var(--red)':v.category==='Resident'?'var(--green)':'var(--text)'}">${v.category}</span></td>
+        <td><button class="btn btn-ghost btn-sm" onclick="deleteVehicle(${v.id})">✕</button></td>
+      </tr>`).join('');
+  } catch {}
+}
+
+async function deleteVehicle(id) {
+  if (!confirm('Delete this vehicle?')) return;
+  await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
+  toast('Vehicle removed');
+  loadVehicles();
+}
+
+// ── Parking ────────────────────────────────────────────────────────────────────
+async function loadSlots() {
+  try {
+    const slots = await fetch('/api/slots').then(r => r.json());
+    const grid  = document.getElementById('slots-grid');
+    grid.innerHTML = slots.map(s => `
+      <div class="slot-box ${s.status}">
+        <div class="slot-id">${s.id}</div>
+        <div class="slot-plate">${s.plate || 'FREE'}</div>
+      </div>`).join('');
+    loadStats();
+  } catch {}
+}
+
+async function exitVehicle() {
+  const plate = document.getElementById('exit-plate').value.trim().toUpperCase();
+  if (!plate) { toast('Enter plate number', 'error'); return; }
+  const r = await fetch('/api/exit_vehicle', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ plate })
+  }).then(r => r.json());
+  toast(r.message || 'Done', r.ok ? 'success' : 'error');
+  if (r.ok) { loadSlots(); document.getElementById('exit-plate').value = ''; }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function toast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show' + (type ? ' ' + type : '');
+  clearTimeout(t._to);
+  t._to = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// ── Analytics ──────────────────────────────────────────────────────────────────
+async function loadAnalytics() {
+  try {
+    const d = await fetch('/api/analytics').then(r => r.json());
+    // overview has the KPIs
+    renderKPIs(d.overview);
+    // hourly heatmap
+    renderHourlyChart(d.hourly ? d.hourly : d.hourly_traffic);
+    // action donut
+    renderDonut(d.actions ? d.actions : d.action_breakdown);
+    // hbars
+    renderHBars('vtype-bars',    d.vehicle_types    || d.vehicle_type_breakdown, '#00d4ff');
+    renderHBars('category-bars', d.categories       || d.category_breakdown,     null, true);
+    renderHBars('gate-bars',     d.gates            || d.gate_activity,           '#9b6dff');
+    renderOCRConf(d.ocr_distribution || d.ocr_confidence_dist);
+    renderTopPlates(d.top_plates);
+    renderDenials(d.frequent_denials);
+    document.getElementById('an-generated').textContent = 'Generated: ' + (d.generated_at || new Date().toLocaleString());
+
+    // New analytics sections (if containers exist)
+    if (d.daily) renderDailyTrend(d.daily);
+    if (d.anomalies) renderAnomalies(d.anomalies);
+    if (d.speed) renderSpeedAnalytics(d.speed);
+    if (d.colors) renderColorStats(d.colors);
+    if (d.day_night) renderNightDaySplit(d.day_night);
+    if (d.prediction) renderPeakPrediction(d.prediction);
+  } catch(e) {
+    console.error('Analytics load failed:', e);
+  }
+}
+
+function renderKPIs(o) {
+  if (!o) return;
+  document.getElementById('an-total').textContent   = o.total       ?? '—';
+  document.getElementById('an-entries').textContent = o.entries     ?? '—';
+  document.getElementById('an-denied').textContent  = o.denied      ?? '—';
+  document.getElementById('an-rate').textContent    = (o.approval_rate ?? '—') + '%';
+  document.getElementById('an-today').textContent   = o.today_total ?? '—';
+  document.getElementById('an-unique').textContent  = o.unique_today?? '—';
+  document.getElementById('an-reg').textContent     = o.registered  ?? '—';
+  document.getElementById('an-alerts').textContent  = o.alerts_open ?? '—';
+}
+
+// stub renderers for new data (safe if containers not present)
+function renderDailyTrend(data) { /* can extend later */ }
+function renderAnomalies(data) { /* can extend later */ }
+function renderSpeedAnalytics(data) { /* reflected in Speed tab */ }
+function renderColorStats(data) { /* can extend later */ }
+function renderNightDaySplit(data) { /* reflected in Night Mode tab */ }
+function renderPeakPrediction(data) { /* can extend later */ }
+
+// ── Night Mode ─────────────────────────────────────────────────────────────────
+async function loadNightMode() {
+  try {
+    const d = await fetch('/api/night_mode').then(r => r.json());
+    renderNightModeStatus(d);
+  } catch(e) {
+    console.error('Night mode load failed', e);
+  }
+}
+
+function renderNightModeStatus(d) {
+  const ind = document.getElementById('nm-indicator');
+  const txt = document.getElementById('nm-status-text');
+  const bri = document.getElementById('nm-brightness');
+
+  ind.style.background = d.active ? 'var(--accent)' : 'var(--muted)';
+  if (d.active) ind.style.boxShadow = '0 0 8px var(--accent)';
+  else ind.style.boxShadow = 'none';
+
+  txt.textContent = d.active ? '🌙 NIGHT ENHANCEMENT ACTIVE' : '☀ DAY MODE (no enhancement)';
+  txt.style.color = d.active ? 'var(--accent)' : 'var(--text)';
+  if (bri) bri.textContent = d.brightness ?? '—';
+
+  // Highlight active mode button
+  ['AUTO','ON','OFF'].forEach(m => {
+    const btn = document.getElementById('nm-' + m.toLowerCase() + '-btn');
+    if (btn) btn.className = 'btn btn-ghost' + (d.mode === m ? ' nm-active' : '');
+  });
+
+  // Switch log
+  const logEl = document.getElementById('nm-switchlog');
+  if (logEl) {
+    if (!d.switch_log || !d.switch_log.length) {
+      logEl.innerHTML = '<div class="text-muted" style="text-align:center;padding:20px;">No switches recorded yet</div>';
+    } else {
+      logEl.innerHTML = [...d.switch_log].reverse().map(([ts, mode]) => `
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <span style="color:var(--muted)">${ts}</span>
+          <span style="color:${mode==='night'?'var(--accent)':'var(--yellow)'}">
+            ${mode === 'night' ? '🌙 NIGHT' : '☀ DAY'}
+          </span>
+        </div>`).join('');
+    }
+  }
+
+  // Night/day split from analytics
+  const splitEl = document.getElementById('nm-split');
+  if (splitEl) {
+    fetch('/api/analytics').then(r => r.json()).then(data => {
+      const nd = data.day_night;
+      if (!nd) return;
+      splitEl.innerHTML = `
+        <div style="display:flex;gap:20px;align-items:center;">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:28px;font-weight:800;font-family:var(--sans);color:var(--accent)">${nd.day_pct}%</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">☀ DAY DETECTIONS</div>
+            <div style="font-size:12px;color:var(--text)">${nd.day} events</div>
+          </div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:28px;font-weight:800;font-family:var(--sans);color:var(--accent)">${nd.night_pct}%</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">🌙 NIGHT DETECTIONS</div>
+            <div style="font-size:12px;color:var(--text)">${nd.night} events</div>
+          </div>
+        </div>`;
+    }).catch(() => {});
+  }
+}
+
+async function setNightMode(mode) {
+  try {
+    const d = await fetch('/api/night_mode', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode })
+    }).then(r => r.json());
+    renderNightModeStatus(d);
+    toast(`Night mode: ${mode}`, 'success');
+  } catch(e) {
+    toast('Failed to set night mode', 'error');
+  }
+}
+
+// ── Speed Estimator ────────────────────────────────────────────────────────────
+async function loadSpeed() {
+  try {
+    const [status, history] = await Promise.all([
+      fetch('/api/speed/status').then(r => r.json()),
+      fetch('/api/speed/history').then(r => r.json()),
+    ]);
+
+    document.getElementById('sp-readings').textContent  = status.total_readings  ?? '—';
+    document.getElementById('sp-overspeed').textContent = status.overspeed_count ?? '—';
+    document.getElementById('sp-zone-a').textContent    = status.plates_in_zone_a ?? '—';
+    document.getElementById('sp-limit').textContent     = status.overspeed_limit ?? '—';
+
+    // Pre-fill config inputs
+    const distInput = document.getElementById('sp-dist-input');
+    const limInput  = document.getElementById('sp-lim-input');
+    if (distInput && !distInput.value) distInput.value = status.zone_distance_m ?? 5;
+    if (limInput  && !limInput.value)  limInput.value  = status.overspeed_limit ?? 20;
+
+    // Render history table
+    const tbody = document.querySelector('#speed-table tbody');
+    if (!tbody) return;
+    if (!history.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">No speed readings yet. Requires vehicle to pass through both zones.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = history.map(r => `
+      <tr>
+        <td>${r.timestamp || '—'}</td>
+        <td style="font-weight:600;color:var(--accent)">${r.plate}</td>
+        <td style="font-weight:700;color:${r.overspeed ? 'var(--red)' : 'var(--green)'}">${r.speed_kmh} km/h</td>
+        <td><span class="${r.overspeed ? 'speed-badge-over' : 'speed-badge-ok'}">${r.overspeed ? '🚨 OVERSPEED' : '✓ OK'}</span></td>
+        <td style="color:var(--muted)">${r.elapsed_s}s</td>
+      </tr>`).join('');
+  } catch(e) {
+    console.error('Speed load failed', e);
+  }
+}
+
+async function saveSpeedConfig() {
+  const dist = parseFloat(document.getElementById('sp-dist-input').value);
+  const lim  = parseFloat(document.getElementById('sp-lim-input').value);
+  if (isNaN(dist) || isNaN(lim)) { toast('Enter valid numbers', 'error'); return; }
+  try {
+    const r = await fetch('/api/speed/config', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ distance_m: dist, limit_kmh: lim })
+    }).then(r => r.json());
+    toast(`Config saved: ${lim} km/h limit, ${dist}m distance`, 'success');
+    loadSpeed();
+  } catch { toast('Save failed', 'error'); }
+}
+
+// ── Multi-Camera ───────────────────────────────────────────────────────────────
+let _camPolling = null;
+
+function initMultiCamGrid() {
+  const grid = document.getElementById('multicam-grid');
+  if (!grid || grid.children.length > 0) return;
+  for (let i = 0; i < 4; i++) {
+    const tile = document.createElement('div');
+    tile.className = 'cam-tile';
+    tile.id = `cam-tile-${i}`;
+    tile.innerHTML = `
+      <div class="cam-tile-header">
+        <span style="font-family:var(--sans);font-weight:700;font-size:12px;">📷 Camera ${i}</span>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="cam-rtsp-${i}" placeholder="rtsp:// or blank for local" 
+                 style="width:180px;padding:3px 8px;font-size:11px;">
+          <select id="cam-hw-${i}" style="padding:3px;font-size:11px;width:80px;">
+            <option value="${i}">Index ${i}</option>
+            <option value="0">Index 0</option>
+            <option value="1">Index 1</option>
+            <option value="2">Index 2</option>
+          </select>
+          <button class="btn btn-success btn-sm" onclick="startCam(${i})">▶</button>
+          <button class="btn btn-danger btn-sm" onclick="stopCam(${i})">■</button>
+        </div>
+      </div>
+      <div class="cam-tile-body">
+        <img id="cam-img-${i}" src="/video_feed/${i}" alt="Camera ${i}" style="width:100%;min-height:200px;background:#000;display:block;">
+      </div>
+      <div class="cam-tile-footer" id="cam-footer-${i}">Idle — click ▶ to start</div>
+    `;
+    grid.appendChild(tile);
+  }
+
+  // Start polling
+  if (!_camPolling) {
+    _camPolling = setInterval(refreshCamStatus, 2500);
+  }
+}
+
+async function startCam(id) {
+  const rtsp  = document.getElementById(`cam-rtsp-${id}`)?.value?.trim() || '';
+  const index = parseInt(document.getElementById(`cam-hw-${id}`)?.value ?? id);
+  const body  = rtsp ? { rtsp_url: rtsp } : { index };
+  try {
+    const r = await fetch(`/api/cameras/${id}/start`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    }).then(r => r.json());
+    toast(r.ok ? `Camera ${id} starting…` : `Camera ${id} failed`, r.ok ? 'success' : 'error');
+    // Reload stream
+    const img = document.getElementById(`cam-img-${id}`);
+    if (img) img.src = `/video_feed/${id}?t=${Date.now()}`;
+  } catch { toast(`Camera ${id} error`, 'error'); }
+}
+
+async function stopCam(id) {
+  await fetch(`/api/cameras/${id}/stop`, { method: 'POST' });
+  toast(`Camera ${id} stopped`);
+}
+
+async function startAllCams() {
+  for (let i = 0; i < 4; i++) await startCam(i);
+}
+
+async function stopAllCams() {
+  for (let i = 0; i < 4; i++) await stopCam(i);
+}
+
+async function refreshCamStatus() {
+  try {
+    const cams = await fetch('/api/cameras').then(r => r.json());
+    cams.forEach(cam => {
+      const tile   = document.getElementById(`cam-tile-${cam.cam_id}`);
+      const footer = document.getElementById(`cam-footer-${cam.cam_id}`);
+      if (!tile || !footer) return;
+
+      tile.className = 'cam-tile' + (cam.running ? ' running' : '');
+
+      const res = cam.result;
+      if (res) {
+        const auth = res.authorized;
+        if (!auth) tile.className += ' denied-last';
+        footer.innerHTML = `
+          <span style="color:${auth?'var(--green)':'var(--red)'};font-weight:700">${auth?'ALLOWED':'DENIED'}</span>
+          &nbsp;|&nbsp;
+          <span style="color:var(--accent)">${res.plate||'—'}</span>
+          &nbsp;${res.owner||''}&nbsp;·&nbsp;${res.timestamp||''}`;
+      } else {
+        footer.textContent = cam.running ? '🟢 Running — no detection yet' : 'Idle';
+      }
+    });
+
+    // Also refresh multi-cam log
+    const logs = await fetch('/api/logs?limit=20').then(r => r.json());
+    const tbody = document.getElementById('multicam-log-tbody');
+    if (tbody) {
+      tbody.innerHTML = logs.map(r => `
+        <tr>
+          <td>${r.timestamp||'—'}</td>
+          <td style="color:var(--muted)">${r.gate||'—'}</td>
+          <td style="font-weight:600;color:var(--accent)">${r.plate||'—'}</td>
+          <td><span class="action-badge ${r.action}">${r.action}</span></td>
+          <td>${r.owner||'—'}</td>
+          <td>${r.gate||'—'}</td>
+        </tr>`).join('');
+    }
+  } catch(e) { /* silent */ }
+}
+
+function renderHourlyChart(data) {
+  if (!data?.length) return;
+  const container = document.getElementById('hourly-chart');
+  const labels    = document.getElementById('hourly-labels');
+  const max       = Math.max(...data.map(d => d.count), 1);
+  const H         = 120;
+  const colors    = ['#00e87a','#00d4ff','#ffd040','#ff9020','#ff3a5c'];
+
+  // Group by 4-hour blocks for color
+  container.innerHTML = data.map((d, i) => {
+    const pct  = d.count / max;
+    const h    = Math.max(2, Math.round(pct * H));
+    const col  = d.count === 0 ? 'var(--border2)' : colors[Math.floor(i/5) % colors.length];
+    return `<div class="bar-col">
+      <div class="bar" style="height:${h}px;background:${col};opacity:${0.5 + pct*0.5}"
+           data-val="${d.count}" title="${d.label}: ${d.count}"></div>
+    </div>`;
+  }).join('');
+
+  // Labels every 4 hours
+  labels.style.cssText = 'display:flex;gap:3px;margin-top:2px;';
+  labels.innerHTML = data.map((d, i) =>
+    `<div style="flex:1;text-align:center;font-size:9px;color:var(--muted)">${i%4===0?d.label.slice(0,2):''}</div>`
+  ).join('');
+}
+
+function renderDonut(data) {
+  if (!data?.length) return;
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+  const svg   = document.getElementById('donut-svg');
+  const leg   = document.getElementById('donut-legend');
+  const cx = 65, cy = 65, R = 50, r = 30;
+  let offset  = -Math.PI / 2;  // start from top
+
+  let paths = '';
+  data.forEach(d => {
+    const angle = (d.value / total) * Math.PI * 2;
+    const x1 = cx + R * Math.cos(offset);
+    const y1 = cy + R * Math.sin(offset);
+    const x2 = cx + R * Math.cos(offset + angle);
+    const y2 = cy + R * Math.sin(offset + angle);
+    const xi1 = cx + r * Math.cos(offset);
+    const yi1 = cy + r * Math.sin(offset);
+    const xi2 = cx + r * Math.cos(offset + angle);
+    const yi2 = cy + r * Math.sin(offset + angle);
+    const large = angle > Math.PI ? 1 : 0;
+    paths += `<path d="M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z"
+      fill="${d.color}" opacity="0.85" stroke="var(--bg)" stroke-width="2">
+      <title>${d.label}: ${d.value}</title></path>`;
+    offset += angle;
+  });
+
+  svg.innerHTML = paths + `<circle cx="${cx}" cy="${cy}" r="${r-4}" fill="var(--card)"/>
+    <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
+      font-family="var(--sans)" font-size="20" font-weight="800" fill="var(--text)">${total}</text>
+    <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="9" fill="var(--muted)">TOTAL</text>`;
+
+  leg.innerHTML = data.map(d =>
+    `<div class="legend-item">
+      <div class="legend-dot" style="background:${d.color}"></div>
+      <span>${d.label}</span>
+      <span style="color:var(--muted);margin-left:auto;padding-left:10px">${d.value}</span>
+    </div>`
+  ).join('');
+}
+
+function renderHBars(containerId, data, defaultColor, useItemColor) {
+  if (!data?.length) return;
+  const el  = document.getElementById(containerId);
+  const max = Math.max(...data.map(d => d.value || d.count || 0), 1);
+  el.innerHTML = data.map(d => {
+    const val  = d.value ?? d.count ?? 0;
+    const pct  = Math.round(val / max * 100);
+    const col  = useItemColor ? (d.color || defaultColor || '#00d4ff') : (defaultColor || '#00d4ff');
+    const lbl  = d.label || d.gate || '—';
+    return `<div class="hbar-row">
+      <div class="hbar-label" title="${lbl}">${lbl}</div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div class="hbar-val">${val}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderOCRConf(data) {
+  if (!data?.length) return;
+  const container = document.getElementById('ocr-conf-chart');
+  const labels    = document.getElementById('ocr-conf-labels');
+  const max       = Math.max(...data.map(d => d.value), 1);
+  const H         = 100;
+  const colors    = ['#ff3a5c','#ff9020','#ffd040','#00d4ff','#00e87a'];
+
+  container.innerHTML = data.map((d, i) => {
+    const pct = d.value / max;
+    const h   = Math.max(2, Math.round(pct * H));
+    return `<div class="bar-col">
+      <div class="bar" style="height:${h}px;background:${colors[i]}" data-val="${d.value}" title="${d.label}: ${d.value}"></div>
+    </div>`;
+  }).join('');
+
+  labels.style.cssText = 'display:flex;gap:3px;margin-top:2px;';
+  labels.innerHTML = data.map(d =>
+    `<div style="flex:1;text-align:center;font-size:9px;color:var(--muted)">${d.label}</div>`
+  ).join('');
+}
+
+function renderTopPlates(rows) {
+  if (!rows?.length) return;
+  const tbody = document.querySelector('#top-plates-table tbody');
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="font-weight:700;color:var(--accent);letter-spacing:1px">${r.plate}</td>
+      <td style="font-weight:600">${r.count}</td>
+      <td>${r.owner}</td>
+      <td><span class="badge-cat ${r.category}">${r.category}</span></td>
+      <td style="color:var(--muted)">${r.last_seen || '—'}</td>
+    </tr>`).join('');
+}
+
+function renderDenials(rows) {
+  if (!rows?.length) return;
+  const tbody = document.querySelector('#denials-table tbody');
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="font-weight:700;color:var(--red);letter-spacing:1px">${r.plate}</td>
+      <td><span style="font-weight:700;color:var(--red)">${r.denials}</span></td>
+      <td style="color:var(--muted)">${r.last_attempt || '—'}</td>
+    </tr>`).join('');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+startLivePolling();
+loadStats();
+// Auto-refresh Night Mode status every 5s (brightness changes frequently)
+setInterval(() => {
+  if (document.getElementById('page-nightmode')?.classList.contains('active')) loadNightMode();
+}, 5000);
+// Auto-refresh Speed every 3s when on that tab
+setInterval(() => {
+  if (document.getElementById('page-speed')?.classList.contains('active')) loadSpeed();
+}, 3000);
+</script>
+</body>
+</html>
